@@ -1,0 +1,95 @@
+EXACT FILES TO UPLOAD TO GITHUB
+================================
+
+✅ UPLOAD THESE FILES (Select these):
+
+JavaScript Files (.js):
+- index.js
+- utils.js
+- health.js
+- circuit-breaker.js
+- intelligence.js
+- usage-metrics.js
+- debug-markets.js
+- run-tests.js
+- send-test-alert.js
+- test-api-connection.js
+- test.js
+- verify-setup.js
+
+Configuration Files:
+- package.json
+- package-lock.json
+- railway.json
+- .gitignore
+
+Documentation Files (.md):
+- README.md
+- README_START_HERE.md
+- DEPLOY_TO_RAILWAY.md
+- RAILWAY_DEPLOYMENT.md
+- RAILWAY_QUICK_START.md
+- PUSH_TO_GITHUB.md
+- PUSH_TO_GITHUB_WEB.md
+- AUTO_PUSH_SETUP.md
+- README_PUSH.md
+- HOW_TO_SELECT_FOLDER.md
+- API_KEY_SETUP.md
+- API_KEY_CLARIFICATION.md
+- CLIENT_ID_EXPLAINED.md
+- COMPLETE_SETUP_GUIDE.md
+- ENV_SETUP_GUIDE.md
+- GETTING_STARTED.md
+- QUICK_START_API_KEY.md
+- SETUP_CHECKLIST.md
+- START_HERE.md
+- WHAT_YOU_NEED.md
+- YOUR_ACTION_ITEMS.md
+- ALL_FIXED_READY.md
+- API_FIX_SUMMARY.md
+- BOT_ANALYSIS_FIXES.md
+- BUGS_FIXED.md
+- CURRENT_STATUS.md
+- DIAGNOSTIC_FIX.md
+- FINAL_NEXT_STEPS.md
+- FINAL_STATUS.md
+- FIXES_APPLIED.md
+- GITHUB_PUSH_INSTRUCTIONS.md
+- GITHUB_WEB_UPLOAD_GUIDE.md
+- IMPROVED_LOGGING.md
+- IMPROVEMENTS_SUMMARY.md
+- NEXT_STEPS.md
+- POLYMARKET_API_ISSUE.md
+- QUICK_START.txt
+- READY_TO_START.md
+- RESTART_INSTRUCTIONS.md
+- START_BOT.txt
+- STATUS_AND_NEXT_STEPS.md
+
+❌ DO NOT UPLOAD (Skip these):
+
+Folders:
+- node_modules/ (too large, will be installed automatically)
+- logs/ (log files)
+- data/ (data files)
+
+Files:
+- .env (contains secrets - NEVER upload)
+- .env.local
+- .env.*.local
+- config.overrides.json (may contain secrets)
+- *.log (any log files)
+- bot.log
+- error.log
+- usage-metrics.json
+
+System Files:
+- .DS_Store
+- Thumbs.db
+- *.swp
+- *.swo
+
+TOTAL: Upload about 50+ files (all .js, .json, .md, .txt files except the excluded ones above)
+
+
+

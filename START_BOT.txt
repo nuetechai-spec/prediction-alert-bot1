@@ -1,0 +1,39 @@
+═══════════════════════════════════════════════════════════════
+  🚀 START YOUR BOT - COPY & PASTE THESE COMMANDS
+═══════════════════════════════════════════════════════════════
+
+1️⃣  Open PowerShell
+
+2️⃣  Copy and paste this EXACT command:
+
+cd "C:\Users\ZachC\Downloads\prediction-alert-bot (1)\prediction-alert-bot"; npm start
+
+═══════════════════════════════════════════════════════════════
+
+OR use the startup script:
+
+cd "C:\Users\ZachC\Downloads\prediction-alert-bot (1)\prediction-alert-bot"; .\start-bot.ps1
+
+═══════════════════════════════════════════════════════════════
+
+✅ Expected output:
+   - "Logged in as RocketBot#4203"
+   - "Scheduled recurring scans"
+   - Bot shows online in Discord
+
+✅ Then test new commands:
+   - !stats   or  /stats
+   - !health  or  /health
+
+═══════════════════════════════════════════════════════════════
+
+
+
+
+
+
+
+
+
+
+

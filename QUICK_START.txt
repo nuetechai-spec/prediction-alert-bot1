@@ -1,0 +1,36 @@
+═══════════════════════════════════════════════════════════════
+  QUICK START GUIDE - Run These Commands
+═══════════════════════════════════════════════════════════════
+
+⚠️ IMPORTANT: Always navigate to the prediction-alert-bot folder first!
+
+1️⃣ Navigate to the bot folder:
+   cd prediction-alert-bot
+
+2️⃣ Verify your setup:
+   node verify-setup.js
+
+3️⃣ Start the bot:
+   npm start
+
+═══════════════════════════════════════════════════════════════
+
+Or run it all in one command:
+   cd prediction-alert-bot; npm start
+
+═══════════════════════════════════════════════════════════════
+
+Once the bot starts, you should see:
+   ✅ "Logged in as YourBotName#1234"
+   ✅ "Scheduled recurring scans"
+   ✅ Bot shows as online (green dot) in Discord
+
+Test in Discord:
+   !testalert   (should post a test alert)
+
+Stop the bot:
+   Press Ctrl+C in the terminal
+
+═══════════════════════════════════════════════════════════════
+
+
