@@ -39,3 +39,4 @@ The bot will still run and function, but will log warnings when no markets are f
 
 
 
+

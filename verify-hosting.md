@@ -112,3 +112,4 @@ Run this quick test:
 - Make sure your Discord bot has proper permissions in the server
 
 
+
