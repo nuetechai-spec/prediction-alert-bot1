@@ -1492,7 +1492,10 @@ async function runSearch(client, category, options = {}) {
         continue;
       }
 
-      if (!channel) continue;
+      if (!channel) {
+        logger.warn('No channel available for search alerts');
+        continue;
+      }
       
       try {
         await sendMarketAlert(channel, market, {
@@ -1505,9 +1508,52 @@ async function runSearch(client, category, options = {}) {
       } catch (err) {
         logger.error('Failed to send market alert', { 
           marketId: market.marketId, 
-          error: err.message
+          error: err.message,
+          stack: err.stack
         });
         healthMonitor.recordError('alert_send_failed', err.message);
+      }
+    }
+
+    // If no markets found or no alerts sent, post a message to the channel
+    if (channel && stats.found === 0) {
+      try {
+        await channel.send({
+          embeds: [new EmbedBuilder()
+            .setTitle(`🔍 Search Results: ${category}`)
+            .setDescription(
+              `**No markets found** in the **${category}** category.\n\n` +
+              `This could mean:\n` +
+              `• No markets currently match this category\n` +
+              `• Markets may be in different categories\n` +
+              `• Try a different category or run \`/scan\` to see all markets`
+            )
+            .setColor(0xff8800)
+            .setTimestamp()
+          ]
+        });
+      } catch (err) {
+        logger.error('Failed to send no results message', { error: err.message });
+      }
+    } else if (channel && stats.found > 0 && stats.alerted === 0) {
+      // Found markets but none were eligible or all were suppressed
+      try {
+        await channel.send({
+          embeds: [new EmbedBuilder()
+            .setTitle(`🔍 Search Results: ${category}`)
+            .setDescription(
+              `**Found ${stats.found} markets** in the **${category}** category, but:\n\n` +
+              `• **${stats.eligible}** passed eligibility filters\n` +
+              `• **${stats.alerted}** alerts sent\n` +
+              `• **${stats.suppressed}** suppressed (duplicate cooldown)\n\n` +
+              `_Markets may not meet current thresholds or were recently alerted._`
+            )
+            .setColor(0xff8800)
+            .setTimestamp()
+          ]
+        });
+      } catch (err) {
+        logger.error('Failed to send search results message', { error: err.message });
       }
     }
 
