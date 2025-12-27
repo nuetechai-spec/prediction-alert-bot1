@@ -636,14 +636,27 @@ function setupClientEvents(client) {
 
   client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
-    if (!checkAuthorization(interaction.member)) {
-      await interaction.reply({
-        content:
-          'You are not authorized to use this command. Contact the bot admin.',
-        ephemeral: true
-      });
-      return;
-    }
+    
+    // Wrap in try-catch to prevent "Unknown interaction" errors
+    try {
+      // Check authorization first
+      if (!checkAuthorization(interaction.member)) {
+        try {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({
+              content: 'You are not authorized to use this command. Contact the bot admin.'
+            });
+          } else {
+            await interaction.reply({
+              content: 'You are not authorized to use this command. Contact the bot admin.',
+              ephemeral: true
+            });
+          }
+        } catch (err) {
+          logger.error('Failed to send authorization error', { error: err.message });
+        }
+        return;
+      }
 
     if (interaction.commandName === 'scan') {
       const startTime = Date.now();
@@ -729,8 +742,13 @@ function setupClientEvents(client) {
     }
     if (interaction.commandName === 'search') {
       const startTime = Date.now();
-      await interaction.deferReply({ ephemeral: true });
+      let deferred = false;
+      
       try {
+        // Defer immediately to prevent timeout
+        await interaction.deferReply({ ephemeral: true });
+        deferred = true;
+        
         const category = interaction.options.getString('category')?.toLowerCase();
         
         if (!category) {
@@ -757,6 +775,9 @@ function setupClientEvents(client) {
         
         const normalizedCategory = categoryMap[category] || category;
         
+        // Update reply to show we're searching
+        await interaction.editReply(`🔍 Searching for **${normalizedCategory}** markets...`);
+        
         const result = await runSearch(interaction.client, normalizedCategory, {
           reason: 'manual-slash',
           notifyChannel: true
@@ -769,13 +790,27 @@ function setupClientEvents(client) {
           metadata: { 
             category: normalizedCategory,
             found: result.found,
+            eligible: result.eligible,
             alerted: result.alerted 
           }
         });
-        await interaction.editReply(
-          `Search completed for **${normalizedCategory}**. Found ${result.found} markets, sent ${result.alerted} alerts.`
-        );
+        
+        let replyMessage = `✅ Search completed for **${normalizedCategory}**\n`;
+        replyMessage += `• Found: ${result.found} markets\n`;
+        replyMessage += `• Eligible: ${result.eligible} markets\n`;
+        replyMessage += `• Alerts sent: ${result.alerted}`;
+        if (result.suppressed > 0) {
+          replyMessage += `\n• Suppressed: ${result.suppressed} (duplicate cooldown)`;
+        }
+        
+        await interaction.editReply(replyMessage);
       } catch (err) {
+        logger.error('Search command error', { 
+          error: err.message, 
+          stack: err.stack,
+          userId: interaction.user.id 
+        });
+        
         const responseTime = Date.now() - startTime;
         usageMetrics.recordUsage('search', {
           userId: interaction.user.id,
@@ -784,7 +819,19 @@ function setupClientEvents(client) {
           responseTime,
           metadata: { error: err.message }
         });
-        await interaction.editReply(`Error searching markets: ${err.message}`);
+        
+        try {
+          if (deferred) {
+            await interaction.editReply(`❌ Error searching markets: ${err.message}\n\nPlease try again or check the bot logs.`);
+          } else {
+            await interaction.reply({
+              content: `❌ Error searching markets: ${err.message}\n\nPlease try again or check the bot logs.`,
+              ephemeral: true
+            });
+          }
+        } catch (replyErr) {
+          logger.error('Failed to send error reply', { error: replyErr.message });
+        }
       }
     }
     if (interaction.commandName === 'stats') {
@@ -880,6 +927,33 @@ function setupClientEvents(client) {
           responseTime
         });
         await interaction.editReply(`Error generating metrics report: ${err.message}`);
+      }
+    }
+    } catch (err) {
+      // Global error handler for interactions to prevent "Unknown interaction" errors
+      logger.error('Unhandled interaction error', { 
+        command: interaction.commandName,
+        error: err.message, 
+        stack: err.stack,
+        userId: interaction.user?.id 
+      });
+      
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({
+            content: `❌ An error occurred while processing your command: ${err.message}\n\nPlease try again later.`
+          });
+        } else {
+          await interaction.reply({
+            content: `❌ An error occurred while processing your command: ${err.message}\n\nPlease try again later.`,
+            ephemeral: true
+          });
+        }
+      } catch (replyErr) {
+        logger.error('Failed to send error reply to interaction', { 
+          originalError: err.message,
+          replyError: replyErr.message 
+        });
       }
     }
   });
