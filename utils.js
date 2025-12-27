@@ -355,12 +355,30 @@ function categorizeMarket(market) {
     'chatgpt', 'openai', 'nvidia', 'amd', 'intel', 'iphone', 'product launch', 'tech'
   ];
   
+  // Weather keywords
+  const weatherKeywords = [
+    'weather', 'temperature', 'rain', 'snow', 'hurricane', 'tornado', 'storm', 'climate',
+    'forecast', 'precipitation', 'drought', 'flood', 'heat wave', 'cold snap', 'blizzard'
+  ];
+  
+  // Breaking news keywords
+  const breakingNewsKeywords = [
+    'breaking', 'news', 'alert', 'urgent', 'developing', 'just in', 'latest', 'update',
+    'announcement', 'statement', 'press release', 'report', 'exclusive', 'scoop'
+  ];
+  
   // Check categories in priority order
   if (cryptoKeywords.some(keyword => title.includes(keyword))) {
     return 'crypto';
   }
   if (politicsKeywords.some(keyword => title.includes(keyword))) {
     return 'politics';
+  }
+  if (weatherKeywords.some(keyword => title.includes(keyword))) {
+    return 'weather';
+  }
+  if (breakingNewsKeywords.some(keyword => title.includes(keyword))) {
+    return 'breaking';
   }
   if (sportsKeywords.some(keyword => title.includes(keyword))) {
     return 'sports';

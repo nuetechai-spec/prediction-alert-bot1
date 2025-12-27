@@ -408,7 +408,7 @@ function setupClientEvents(client) {
       .toLowerCase()
       .split(/\s+/);
 
-    if (!['scan', 'config', 'testalert', 'stats', 'health', 'trends', 'metrics'].includes(command)) return;
+    if (!['scan', 'config', 'testalert', 'search', 'stats', 'health', 'trends', 'metrics'].includes(command)) return;
 
     const isAuthorized = checkAuthorization(message.member);
     if (!isAuthorized) {
@@ -490,6 +490,65 @@ function setupClientEvents(client) {
           responseTime
         });
         throw err;
+      }
+    } else if (command === 'search') {
+      const startTime = Date.now();
+      try {
+        const args = message.content.slice(1).trim().split(/\s+/).slice(1);
+        const category = args[0]?.toLowerCase();
+        
+        if (!category) {
+          await message.reply('Please specify a category. Usage: `!search <category>`\nAvailable categories: crypto, politics, weather, tech, economics, breaking, sports, entertainment, other');
+          return;
+        }
+        
+        // Normalize category names
+        const categoryMap = {
+          'crypto': 'crypto',
+          'politics': 'politics',
+          'weather': 'weather',
+          'tech': 'technology',
+          'technology': 'technology',
+          'econ': 'economics',
+          'economics': 'economics',
+          'breaking': 'breaking',
+          'news': 'breaking',
+          'breaking/news': 'breaking',
+          'sports': 'sports',
+          'entertainment': 'entertainment',
+          'other': 'other'
+        };
+        
+        const normalizedCategory = categoryMap[category] || category;
+        
+        const result = await runSearch(message.client, normalizedCategory, {
+          reason: 'manual-command',
+          commandMessage: message
+        });
+        const responseTime = Date.now() - startTime;
+        usageMetrics.recordUsage('search', {
+          userId: message.author.id,
+          success: true,
+          responseTime,
+          metadata: { 
+            category: normalizedCategory,
+            found: result.found,
+            alerted: result.alerted 
+          }
+        });
+        await message.reply(
+          `Search completed for **${normalizedCategory}**. Found ${result.found} markets, sent ${result.alerted} alerts.`
+        );
+      } catch (err) {
+        const responseTime = Date.now() - startTime;
+        usageMetrics.recordUsage('search', {
+          userId: message.author.id,
+          success: false,
+          error: err,
+          responseTime,
+          metadata: { error: err.message }
+        });
+        await message.reply(`Error searching markets: ${err.message}`);
       }
     } else if (command === 'stats') {
       const startTime = Date.now();
@@ -668,6 +727,66 @@ function setupClientEvents(client) {
         throw err;
       }
     }
+    if (interaction.commandName === 'search') {
+      const startTime = Date.now();
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const category = interaction.options.getString('category')?.toLowerCase();
+        
+        if (!category) {
+          await interaction.editReply('Please specify a category. Available categories: crypto, politics, weather, tech, economics, breaking, sports, entertainment, other');
+          return;
+        }
+        
+        // Normalize category names
+        const categoryMap = {
+          'crypto': 'crypto',
+          'politics': 'politics',
+          'weather': 'weather',
+          'tech': 'technology',
+          'technology': 'technology',
+          'econ': 'economics',
+          'economics': 'economics',
+          'breaking': 'breaking',
+          'news': 'breaking',
+          'breaking/news': 'breaking',
+          'sports': 'sports',
+          'entertainment': 'entertainment',
+          'other': 'other'
+        };
+        
+        const normalizedCategory = categoryMap[category] || category;
+        
+        const result = await runSearch(interaction.client, normalizedCategory, {
+          reason: 'manual-slash',
+          notifyChannel: true
+        });
+        const responseTime = Date.now() - startTime;
+        usageMetrics.recordUsage('search', {
+          userId: interaction.user.id,
+          success: true,
+          responseTime,
+          metadata: { 
+            category: normalizedCategory,
+            found: result.found,
+            alerted: result.alerted 
+          }
+        });
+        await interaction.editReply(
+          `Search completed for **${normalizedCategory}**. Found ${result.found} markets, sent ${result.alerted} alerts.`
+        );
+      } catch (err) {
+        const responseTime = Date.now() - startTime;
+        usageMetrics.recordUsage('search', {
+          userId: interaction.user.id,
+          success: false,
+          error: err,
+          responseTime,
+          metadata: { error: err.message }
+        });
+        await interaction.editReply(`Error searching markets: ${err.message}`);
+      }
+    }
     if (interaction.commandName === 'stats') {
       const startTime = Date.now();
       try {
@@ -795,6 +914,29 @@ async function registerSlashCommands() {
     {
       name: 'testalert',
       description: 'Send a sample alert embed'
+    },
+    {
+      name: 'search',
+      description: 'Search markets by category',
+      options: [
+        {
+          name: 'category',
+          type: 3, // STRING
+          description: 'Category to search for',
+          required: true,
+          choices: [
+            { name: 'Crypto', value: 'crypto' },
+            { name: 'Politics', value: 'politics' },
+            { name: 'Weather', value: 'weather' },
+            { name: 'Tech', value: 'technology' },
+            { name: 'Economics', value: 'economics' },
+            { name: 'Breaking News', value: 'breaking' },
+            { name: 'Sports', value: 'sports' },
+            { name: 'Entertainment', value: 'entertainment' },
+            { name: 'Other', value: 'other' }
+          ]
+        }
+      ]
     },
     {
       name: 'stats',
@@ -1201,6 +1343,112 @@ async function runScan(client, options = {}) {
       ).catch(() => {}); // Don't throw if alert fails
     }
     
+    throw err;
+  }
+}
+
+/**
+ * Search markets by category
+ */
+async function runSearch(client, category, options = {}) {
+  const { reason, notifyChannel = true, commandMessage } = options;
+  const now = Date.now();
+  const searchStartTime = Date.now();
+
+  logger.info(`🔍 Starting category search: ${category} (${reason})`);
+  
+  try {
+    const markets = await fetchAllMarkets();
+    logger.info(`📦 Total markets collected: ${markets.length}`);
+    
+    const stats = {
+      found: 0,
+      eligible: 0,
+      alerted: 0,
+      suppressed: 0
+    };
+
+    const channel = notifyChannel ? await resolveChannel(client) : null;
+
+    // Filter markets by category
+    const categoryMarkets = [];
+    for (const market of markets) {
+      // Get market intelligence
+      const insights = marketIntelligence.getInsights(market);
+      market.intelligence = insights;
+      
+      const scoreResult = calculateConfidenceScore(
+        market,
+        config.scoringOverrides
+      );
+      market.confidence = scoreResult.total;
+      market.scoreBreakdown = scoreResult.breakdown;
+      market.explanations = scoreResult.explanations;
+      market.bucket = bucketMarket(market.timeToResolveMs);
+      market.urgency = insights.urgency;
+      market.category = categorizeMarket(market);
+
+      // Check if market matches category
+      if (market.category === category) {
+        stats.found += 1;
+        
+        if (isMarketEligible(market, config.thresholds)) {
+          stats.eligible += 1;
+          categoryMarkets.push(market);
+        }
+      }
+    }
+
+    // Sort by urgency + confidence (highest first)
+    categoryMarkets.sort((a, b) => {
+      const scoreA = (a.urgency || 0) + a.confidence;
+      const scoreB = (b.urgency || 0) + b.confidence;
+      return scoreB - scoreA;
+    });
+
+    // Limit to top 10 markets
+    const marketsToAlert = categoryMarkets.slice(0, 10);
+
+    for (const market of marketsToAlert) {
+      const cacheKey = `${market.source}:${market.marketId}`;
+      const cooldownMs = config.duplicateSuppressionMinutes * 60 * 1000;
+      const cachedUntil = duplicateCache.get(cacheKey);
+      if (cachedUntil && cachedUntil > now) {
+        stats.suppressed += 1;
+        continue;
+      }
+
+      if (!channel) continue;
+      
+      try {
+        await sendMarketAlert(channel, market, {
+          triggeredBy: reason || 'search',
+          commandMessage
+        });
+        duplicateCache.set(cacheKey, now + cooldownMs);
+        stats.alerted += 1;
+        healthMonitor.recordAlert(market.source);
+      } catch (err) {
+        logger.error('Failed to send market alert', { 
+          marketId: market.marketId, 
+          error: err.message
+        });
+        healthMonitor.recordError('alert_send_failed', err.message);
+      }
+    }
+
+    const searchDuration = Date.now() - searchStartTime;
+    
+    logger.info(
+      `✅ Search completed: ${stats.found} found, ${stats.eligible} eligible, ` +
+      `${stats.alerted} alerts sent, ${stats.suppressed} suppressed (${(searchDuration / 1000).toFixed(2)}s)`
+    );
+    
+    return stats;
+  } catch (err) {
+    const searchDuration = Date.now() - searchStartTime;
+    healthMonitor.recordError('search_failed', err.message);
+    logger.error('Search failed', { category, reason, error: err.message, stack: err.stack });
     throw err;
   }
 }
@@ -2233,33 +2481,6 @@ async function sendMarketAlert(channel, market) {
   if (urgency > 70) embedColor = 0xff0000; // Red for high urgency
   else if (urgency > 50) embedColor = 0xff8800; // Orange for moderate urgency
   
-  // Format probability with better precision
-  const probability = formatProbability(market.lastPrice);
-  const confidence = Math.round(market.confidence || 0);
-  
-  // Build premium description with key metrics
-  // Add confidence badge
-  let confidenceBadge = '';
-  if (confidence >= 80) confidenceBadge = '💎 Premium';
-  else if (confidence >= 65) confidenceBadge = '⭐ High Quality';
-  else if (confidence >= 50) confidenceBadge = '✓ Verified';
-  else confidenceBadge = '📊 Standard';
-  
-  // Add category badge for diversity
-  const category = market.category || categorizeMarket(market);
-  const categoryEmoji = {
-    'crypto': '₿',
-    'politics': '🗳️',
-    'sports': '⚽',
-    'entertainment': '🎬',
-    'economics': '📈',
-    'technology': '💻',
-    'other': '📋'
-  }[category] || '📋';
-  const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
-  
-  const description = `**${confidenceBadge}** • Confidence: **${confidence}%** • Probability: **${probability}** • ${categoryEmoji} **${categoryName}**`;
-  
   // Build premium embed with clear source identification
   const sourceName = market.source || 'Unknown';
   const sourceIcon = market.source === 'Polymarket'
@@ -2272,7 +2493,6 @@ async function sendMarketAlert(channel, market) {
   const embed = new EmbedBuilder()
     .setTitle(`${bucketEmoji(market.bucket)} ${market.title}`)
     .setURL(market.url)
-    .setDescription(description)
     .setColor(embedColor)
     .setAuthor({
       name: sourceName,
@@ -2377,11 +2597,12 @@ async function sendMarketAlert(channel, market) {
     inline: false
   });
   
-  // Intelligence summary (enhanced formatting - deeper analysis)
-  if (intelligence.summary) {
+  // Specific drivers for the market (enhanced formatting - deeper analysis)
+  const drivers = buildMarketDrivers(market, intelligence);
+  if (drivers) {
     embed.addFields({
-      name: '🧠 AI Intelligence Analysis',
-      value: intelligence.summary,
+      name: '🚀 Specific Drivers for This Market',
+      value: drivers,
       inline: false
     });
   }
@@ -2502,6 +2723,97 @@ function buildRationaleText(market) {
     .map(s => s.charAt(0).toUpperCase() + s.slice(1)) // Capitalize first letter
     .join(' • ');
   return trimmed || 'Meets configured thresholds; monitor closely.';
+}
+
+function buildMarketDrivers(market, intelligence) {
+  const drivers = [];
+  const breakdown = market.scoreBreakdown || {};
+  const trend = intelligence.trend || {};
+  const anomalies = intelligence.anomalies || [];
+  
+  // Liquidity driver
+  if (breakdown.liquidity > 20) {
+    const liquidity = safeNumber(market.liquidity, 0);
+    if (liquidity >= 25000) {
+      drivers.push(`💰 **High liquidity** (${formatCurrency(liquidity)}) - Strong market depth and trading interest`);
+    } else if (liquidity >= 5000) {
+      drivers.push(`💰 **Solid liquidity** (${formatCurrency(liquidity)}) - Good market depth`);
+    }
+  }
+  
+  // Volume momentum driver
+  if (breakdown.volume > 15) {
+    const volume24h = safeNumber(market.volume24h, 0);
+    const volumeChange = market.priceChange24h ? (market.priceChange24h * 100).toFixed(1) : null;
+    if (volume24h > 10000) {
+      drivers.push(`📊 **Strong volume** (${formatCurrency(volume24h)} 24h) - High trading activity`);
+    } else if (volume24h > 0) {
+      drivers.push(`📊 **Active trading** (${formatCurrency(volume24h)} 24h)`);
+    }
+    if (volumeChange && Math.abs(parseFloat(volumeChange)) > 10) {
+      drivers.push(`📈 **Volume momentum** (${volumeChange > 0 ? '+' : ''}${volumeChange}% change)`);
+    }
+  }
+  
+  // Price movement driver
+  if (breakdown.price > 10) {
+    const priceChange1h = market.priceChange1h ? (market.priceChange1h * 100).toFixed(1) : null;
+    const priceChange24h = market.priceChange24h ? (market.priceChange24h * 100).toFixed(1) : null;
+    if (priceChange1h && Math.abs(parseFloat(priceChange1h)) > 5) {
+      drivers.push(`📈 **Price movement** (${priceChange1h > 0 ? '+' : ''}${priceChange1h}% in 1h) - Recent momentum shift`);
+    } else if (priceChange24h && Math.abs(parseFloat(priceChange24h)) > 10) {
+      drivers.push(`📈 **Price trend** (${priceChange24h > 0 ? '+' : ''}${priceChange24h}% in 24h) - Sustained movement`);
+    }
+  }
+  
+  // Time pressure driver
+  if (breakdown.time > 10) {
+    const hoursToResolve = market.timeToResolveMs / (1000 * 60 * 60);
+    if (hoursToResolve < 1) {
+      drivers.push(`⏰ **Imminent resolution** (<1 hour) - Time pressure creating urgency`);
+    } else if (hoursToResolve < 6) {
+      drivers.push(`⏰ **Approaching resolution** (${hoursToResolve.toFixed(1)}h) - Time-sensitive opportunity`);
+    } else if (hoursToResolve < 24) {
+      drivers.push(`⏰ **Near-term resolution** (${hoursToResolve.toFixed(1)}h) - Short time window`);
+    }
+  }
+  
+  // Spread efficiency driver
+  if (breakdown.spread > 5) {
+    const spreadPct = market.spread ? (market.spread * 100).toFixed(2) : null;
+    if (spreadPct && parseFloat(spreadPct) < 3) {
+      drivers.push(`📏 **Tight spread** (${spreadPct}%) - Efficient pricing, low slippage risk`);
+    }
+  }
+  
+  // Trend driver
+  if (trend && trend.trend !== 'neutral' && trend.confidence > 50) {
+    const trendText = trend.trend === 'strong_up' ? 'Strong uptrend' :
+                     trend.trend === 'up' ? 'Uptrend' :
+                     trend.trend === 'strong_down' ? 'Strong downtrend' :
+                     trend.trend === 'down' ? 'Downtrend' : 'Neutral';
+    drivers.push(`📊 **${trendText}** (${trend.confidence.toFixed(0)}% confidence) - Clear directional momentum`);
+  }
+  
+  // Anomaly drivers
+  if (anomalies.length > 0) {
+    const highSeverity = anomalies.filter(a => a.severity === 'high');
+    if (highSeverity.length > 0) {
+      highSeverity.forEach(anomaly => {
+        drivers.push(`⚠️ **${anomaly.message}** - Unusual market activity`);
+      });
+    }
+  }
+  
+  // Confidence driver
+  const confidence = Math.round(market.confidence || 0);
+  if (confidence >= 75) {
+    drivers.push(`⭐ **High confidence score** (${confidence}%) - Strong overall market signals`);
+  } else if (confidence >= 50) {
+    drivers.push(`✓ **Moderate confidence** (${confidence}%) - Good market indicators`);
+  }
+  
+  return drivers.length > 0 ? drivers.join('\n\n') : 'Standard market conditions with baseline indicators.';
 }
 
 function bucketEmoji(bucket) {
